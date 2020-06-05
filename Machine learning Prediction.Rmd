@@ -1,0 +1,119 @@
+---
+title: "Machine Learning Project"
+author: "Kannimangalam Ashok"
+date: "01/06/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE,cache=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, We will be using data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.The goal of this project is to build a model and use it to predict the manner in which they did the exercise.
+
+The following packages are used
+```{r}
+        library(caret)
+        library(ggplot2)
+        set.seed(12345)
+        
+```
+
+## Data used
+```{r}
+        urltrain <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+        urltest <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+        
+        modelData <- read.csv(urltrain,header = TRUE)
+        submitData <- read.csv(urltest,header = TRUE)
+        
+```
+## Exploratory data analysis and data cleaning
+
+```{r}
+        str(modelData)
+```
+
+We check for any missing data
+
+```{r}
+        naData <- sapply(modelData,is.na)
+        nastat <- apply(naData,2,sum)
+        nacols <- which(nastat > 0,arr.ind = TRUE)
+```
+
+We find that there are `r length(nacols)` columns with NA. we remove those columns in modelData and submitData
+
+```{r}
+        cleanModelData <- modelData[,-nacols]
+        cleanSubmitData <- submitData[,-nacols]
+```
+
+We  also remove the index and date stamp columns as they don't contribute to the prediction. ie we remove the first 5 columns. We also remove columns that has near zero variance.
+
+```{r}
+        cleanModelData <- cleanModelData[,-c(1:5)]
+        cleanSubmitData <- cleanSubmitData[,-c(1:5)]
+        NZV <- nearZeroVar(cleanModelData)
+        cleanModelData <- cleanModelData[, -NZV]
+        cleanSubmitData  <- cleanSubmitData[, -NZV]
+        dim(cleanModelData)
+        dim(cleanSubmitData)
+        
+```
+
+## Prediction Model
+
+We  split the cleanModelData into training and test set
+
+```{r}
+        inTrain <- createDataPartition(cleanModelData$classe, p= 0.7,list = FALSE)
+        training <- cleanModelData[inTrain,]
+        testing <- cleanModelData[-inTrain,]
+        dim(training) ; dim(testing)
+```
+
+We  fit the training data using Random Forest as Ramdom Forest produces models for high accuracy prediction. We will be controlling the training using trControl parameter for cross validation.
+
+```{r}
+        
+        memory.limit(size = 10000) #Random forest is memory intensive
+        tr_Control <- trainControl(method="cv", number=3, verboseIter=FALSE)
+        rffit <- train(classe ~ ., data=training, method="rf",
+                          trControl=tr_Control)
+        rffit$finalModel
+```
+        
+The out-of-bag error estimate is 0.19% which is quite low.Now we validate the model with the testing data to see the accuracy of the model. 
+
+```{r}
+        predModel <- predict(rffit,testing)
+        CM <- confusionMatrix(predModel,testing$classe)
+        CM
+```
+
+The model accuracy is at 99.9%. We will therefore choose this model. 
+
+```{r}
+        CMdf <- as.data.frame(CM$table)
+        g <- ggplot(CMdf,aes(x= Reference, y = Prediction, fill = Freq)) 
+        g + geom_tile(colour = "black") + theme_bw() + coord_equal() + scale_fill_distiller(palette =  "Blues" , direction = +1)  +
+  guides(fill=F) + 
+  labs(title = "Confusion matrix - Testing data") + 
+  geom_text(aes(label= Freq), color="black") 
+```
+
+
+
+## Prediction
+
+Now we  predict the outcome for the 20 cases in the cleanSubmitData.
+
+```{r}
+        result <- predict(rffit,cleanSubmitData)
+        result
+```
+
+
